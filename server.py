@@ -175,7 +175,7 @@ def ssh_uptime() -> str:
 @mcp.tool()
 def ssh_nginx_status() -> str:
     """Get nginx systemd status."""
-    out, err, code = _run("sudo systemctl status nginx --no-pager -l")
+    out, err, code = _run("sudo -n systemctl status nginx --no-pager -l")
     log("nginx_status", SSH_HOST)
     return _result(out, err, code)
 
@@ -183,7 +183,7 @@ def ssh_nginx_status() -> str:
 @mcp.tool()
 def ssh_nginx_restart() -> str:
     """Restart nginx."""
-    out, err, code = _run("sudo systemctl restart nginx && echo 'nginx restarted OK'")
+    out, err, code = _run("sudo -n systemctl restart nginx && echo 'nginx restarted OK'")
     log("nginx_restart", f"exit {code}", success=(code == 0))
     return _result(out, err, code)
 
@@ -192,7 +192,7 @@ def ssh_nginx_restart() -> str:
 def ssh_nginx_logs(lines: int = 50) -> str:
     """Fetch the last N lines of nginx error log (default 50, max 200)."""
     lines = min(int(lines), 200)
-    out, err, code = _run(f"sudo tail -n {lines} /var/log/nginx/error.log")
+    out, err, code = _run(f"sudo -n tail -n {lines} /var/log/nginx/error.log")
     log("nginx_logs", f"last={lines}")
     return _result(out, err, code)
 
