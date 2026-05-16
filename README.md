@@ -1,99 +1,99 @@
 # mcp-ssh
 
-MCP server para Claude Desktop que permite gerenciar um VPS remoto via SSH com segurança.
+MCP server for Claude Desktop that allows secure management of a remote VPS via SSH.
 
-## Modelo de segurança
+## Security model
 
-| Camada | Controle |
+| Layer | Control |
 |---|---|
-| VPS | Usuário dedicado `claude-agent` com sudo restrito a serviços específicos |
-| SSH | Chave Ed25519 dedicada com passphrase, separada da chave pessoal |
-| MCP | Allowlist de serviços e repos — sem execução arbitrária |
-| Audit | Todo comando executado é logado em `~/.mcp-ssh/audit.log` |
-| Transporte | stdio (sem porta exposta na rede local) |
+| VPS | Dedicated `claude-agent` user with sudo restricted to specific services only |
+| SSH | Dedicated Ed25519 key with passphrase, separate from your personal key |
+| MCP | Service and repo allowlist — no arbitrary shell execution |
+| Audit | Every executed command is logged to `~/.mcp-ssh/audit.log` |
+| Transport | stdio (no port exposed on the local network) |
 
-## Ferramentas disponíveis
+## Available tools
 
-| Ferramenta | Descrição |
+| Tool | Description |
 |---|---|
-| `ssh_ping` | Testa conectividade — retorna hostname e uptime |
-| `ssh_service_status` | Status systemctl de um serviço permitido |
-| `ssh_restart_service` | Reinicia um serviço permitido |
-| `ssh_service_logs` | Últimas N linhas do journal de um serviço |
-| `ssh_disk_usage` | Uso de disco (df -h) |
-| `ssh_memory_usage` | Uso de memória + top processos |
-| `ssh_uptime` | Uptime e load average |
-| `ssh_git_pull` | git pull em um repo permitido |
-| `ssh_git_status` | git status + últimos 5 commits de um repo |
-| `ssh_read_file` | Lê um arquivo remoto (máx 500 linhas) |
-| `ssh_list_dir` | Lista arquivos em um diretório (ls -lah) |
-| `ssh_audit_log` | Exibe o log de auditoria local |
-| `ssh_config_info` | Mostra a config atual (sem secrets) |
+| `ssh_ping` | Tests connectivity — returns hostname and uptime |
+| `ssh_service_status` | systemctl status of an allowed service |
+| `ssh_restart_service` | Restarts an allowed service |
+| `ssh_service_logs` | Last N lines of a service's journal |
+| `ssh_disk_usage` | Disk usage (df -h) |
+| `ssh_memory_usage` | Memory usage + top processes |
+| `ssh_uptime` | Uptime and load average |
+| `ssh_git_pull` | git pull in an allowed repo path |
+| `ssh_git_status` | git status + last 5 commits of a repo |
+| `ssh_read_file` | Reads a remote file (max 500 lines) |
+| `ssh_list_dir` | Lists files in a directory (ls -lah) |
+| `ssh_audit_log` | Displays the local audit log |
+| `ssh_config_info` | Shows current config (no secrets) |
 
-## Instalação
+## Installation
 
-### 1. VPS — criar usuário dedicado
+### 1. VPS — create dedicated user
 
 ```bash
-# No VPS como root:
+# On the VPS as root:
 sudo bash setup_vps.sh
 ```
 
-Edite `setup_vps.sh` para incluir seus serviços antes de rodar.
+Edit `setup_vps.sh` to include your services before running.
 
-### 2. Windows — instalar e gerar chave SSH
+### 2. Windows — install dependencies and generate SSH key
 
 ```bat
 install.bat
 ```
 
-O script instala as dependências e gera a chave `mcp_ssh_ed25519`.
+The script installs dependencies and generates the `mcp_ssh_ed25519` key.
 
-### 3. VPS — autorizar a chave pública
+### 3. VPS — authorize the public key
 
 ```bash
-echo "sua-chave-publica" >> /home/claude-agent/.ssh/authorized_keys
+echo "your-public-key" >> /home/claude-agent/.ssh/authorized_keys
 ```
 
-### 4. Testar a conexão manualmente
+### 4. Test the connection manually
 
 ```bat
-ssh -i C:\Users\panta\.ssh\mcp_ssh_ed25519 claude-agent@seu.vps.ip
+ssh -i C:\Users\panta\.ssh\mcp_ssh_ed25519 claude-agent@your.vps.ip
 ```
 
 ### 5. claude_desktop_config.json
 
-Adicione em `mcpServers`:
+Add to `mcpServers`:
 
 ```json
 "mcp-ssh": {
   "command": "python",
   "args": ["C:\\Users\\panta\\mcp-ssh\\server.py"],
   "env": {
-    "MCP_SSH_HOST": "seu.vps.ip",
+    "MCP_SSH_HOST": "your.vps.ip",
     "MCP_SSH_PORT": "22",
     "MCP_SSH_USER": "claude-agent",
     "MCP_SSH_KEY_PATH": "C:\\Users\\panta\\.ssh\\mcp_ssh_ed25519",
-    "MCP_SSH_KEY_PASSPHRASE": "sua-passphrase",
+    "MCP_SSH_KEY_PASSPHRASE": "your-passphrase",
     "MCP_SSH_ALLOWED_SERVICES": "telegram-bot,pandapoints-dapp,nginx",
     "MCP_SSH_ALLOWED_REPOS": "/home/claude-agent/pandapoints-dapp,/home/claude-agent/telegram-bot"
   }
 }
 ```
 
-### 6. Reiniciar o Claude Desktop
+### 6. Restart Claude Desktop
 
 ---
 
-## Adicionando novos serviços
+## Adding new services
 
-1. Edite `setup_vps.sh`, adicione o serviço ao array `SERVICES`, re-execute no VPS.
-2. Atualize `MCP_SSH_ALLOWED_SERVICES` no `claude_desktop_config.json`.
-3. Reinicie o Claude Desktop.
+1. Edit `setup_vps.sh`, add the service to the `SERVICES` array, re-run on the VPS.
+2. Update `MCP_SSH_ALLOWED_SERVICES` in `claude_desktop_config.json`.
+3. Restart Claude Desktop.
 
 ## Audit log
 
-O log local fica em `%USERPROFILE%\.mcp-ssh\audit.log`. Exemplo:
+The local log is at `%USERPROFILE%\.mcp-ssh\audit.log`. Example:
 
 ```
 2026-05-16T14:23:01 | INFO | OK | service_logs | telegram-bot last=50
