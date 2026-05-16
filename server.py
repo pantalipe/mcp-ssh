@@ -105,14 +105,10 @@ def _run(command: str, pty: bool = False) -> tuple[str, str, int]:
     """Open a fresh connection, run command, return (stdout, stderr, exit_code)."""
     client = _connect()
     try:
-        transport = client.get_transport()
-        channel = transport.open_session()
-        if pty:
-            channel.get_pty()
-        channel.exec_command(command)
-        out = channel.makefile("rb").read().decode("utf-8", errors="replace").strip()
-        err = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace").strip()
-        code = channel.recv_exit_status()
+        _, stdout, stderr = client.exec_command(command, timeout=30)
+        out = stdout.read().decode("utf-8", errors="replace").strip()
+        err = stderr.read().decode("utf-8", errors="replace").strip()
+        code = stdout.channel.recv_exit_status()
         return out, err, code
     finally:
         client.close()
