@@ -17,10 +17,13 @@ SSH_USER="panda"
 echo ">>> Configuring sudoers for $SSH_USER (nginx only)"
 SUDOERS_FILE="/etc/sudoers.d/panda-mcp"
 
+# Detect systemctl path
+SYSTEMCTL=$(which systemctl 2>/dev/null || echo /usr/bin/systemctl)
+
 cat > "$SUDOERS_FILE" << EOF
 # mcp-ssh sudoers — allows panda to manage nginx and read its logs
-$SSH_USER ALL=(ALL) NOPASSWD: /bin/systemctl status nginx
-$SSH_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart nginx
+$SSH_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL status nginx
+$SSH_USER ALL=(ALL) NOPASSWD: $SYSTEMCTL restart nginx
 $SSH_USER ALL=(ALL) NOPASSWD: /usr/bin/tail -n * /var/log/nginx/error.log
 $SSH_USER ALL=(ALL) NOPASSWD: /usr/bin/tail -n * /var/log/nginx/access.log
 EOF
