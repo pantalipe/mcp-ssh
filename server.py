@@ -101,14 +101,18 @@ def _connect() -> paramiko.SSHClient:
     return client
 
 
-def _run(command: str) -> tuple[str, str, int]:
+def _run(command: str, pty: bool = False) -> tuple[str, str, int]:
     """Open a fresh connection, run command, return (stdout, stderr, exit_code)."""
     client = _connect()
     try:
-        _, stdout, stderr = client.exec_command(command, timeout=30)
-        out = stdout.read().decode("utf-8", errors="replace").strip()
-        err = stderr.read().decode("utf-8", errors="replace").strip()
-        code = stdout.channel.recv_exit_status()
+        transport = client.get_transport()
+        channel = transport.open_session()
+        if pty:
+            channel.get_pty()
+        channel.exec_command(command)
+        out = channel.makefile("r").read().strip()
+        err = channel.makefile_stderr("r").read().strip()
+        code = channel.recv_exit_status()
         return out, err, code
     finally:
         client.close()
@@ -175,7 +179,7 @@ def ssh_uptime() -> str:
 @mcp.tool()
 def ssh_nginx_status() -> str:
     """Get nginx systemd status."""
-    out, err, code = _run("sudo -n systemctl status nginx --no-pager -l")
+    out, err, code = _run("sudo -n systemctl status nginx --no-pager -l", pty=True)
     log("nginx_status", SSH_HOST)
     return _result(out, err, code)
 
@@ -183,7 +187,7 @@ def ssh_nginx_status() -> str:
 @mcp.tool()
 def ssh_nginx_restart() -> str:
     """Restart nginx."""
-    out, err, code = _run("sudo -n systemctl restart nginx && echo 'nginx restarted OK'")
+    out, err, code = _run("sudo -n systemctl restart nginx && echo 'nginx restarted OK'", pty=True)
     log("nginx_restart", f"exit {code}", success=(code == 0))
     return _result(out, err, code)
 
@@ -192,7 +196,7 @@ def ssh_nginx_restart() -> str:
 def ssh_nginx_logs(lines: int = 50) -> str:
     """Fetch the last N lines of nginx error log (default 50, max 200)."""
     lines = min(int(lines), 200)
-    out, err, code = _run(f"sudo -n tail -n {lines} /var/log/nginx/error.log")
+    out, err, code = _run(f"sudo -n tail -n {lines} /var/log/nginx/error.log", pty=True)
     log("nginx_logs", f"last={lines}")
     return _result(out, err, code)
 
