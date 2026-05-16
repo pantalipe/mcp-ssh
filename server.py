@@ -37,12 +37,12 @@ ALLOWED_SYSTEMD = set(
 
 # pm2 app names allowed for status/restart/logs
 ALLOWED_PM2 = set(
-    os.environ.get("MCP_SSH_ALLOWED_PM2", "pandapoints-dapp").split(",")
+    os.environ.get("MCP_SSH_ALLOWED_PM2", "pp").split(",")
 ) - {""}
 
 # screen session names allowed for inspection
 ALLOWED_SCREENS = set(
-    os.environ.get("MCP_SSH_ALLOWED_SCREENS", "telegram-bot").split(",")
+    os.environ.get("MCP_SSH_ALLOWED_SCREENS", "bot").split(",")
 ) - {""}
 
 # Directories allowed for git pull/status
@@ -197,7 +197,7 @@ def ssh_nginx_logs(lines: int = 50) -> str:
     return _result(out, err, code)
 
 
-# ── pm2 (dapp) ────────────────────────────────────────────────────────────────
+# ── pm2 — pandapoints dapp (name: pp) ────────────────────────────────────────
 
 @mcp.tool()
 def ssh_pm2_status() -> str:
@@ -210,7 +210,7 @@ def ssh_pm2_status() -> str:
 @mcp.tool()
 def ssh_pm2_restart(name: str) -> str:
     """
-    Restart a pm2 app. Allowed apps are defined in MCP_SSH_ALLOWED_PM2.
+    Restart a pm2 app. Allowed apps defined in MCP_SSH_ALLOWED_PM2 (default: pp).
     """
     if name not in ALLOWED_PM2:
         log("pm2_restart", f"BLOCKED: {name}", success=False)
@@ -224,17 +224,22 @@ def ssh_pm2_restart(name: str) -> str:
 def ssh_pm2_logs(name: str, lines: int = 50) -> str:
     """
     Fetch the last N lines of a pm2 app's logs (default 50, max 200).
+    Reads directly from /home/panda/.pm2/logs/<name>-out.log and <name>-error.log.
     """
     if name not in ALLOWED_PM2:
         log("pm2_logs", f"BLOCKED: {name}", success=False)
         return f"App '{name}' is not in the allowed list: {sorted(ALLOWED_PM2)}"
     lines = min(int(lines), 200)
-    out, err, code = _run(f"pm2 logs {name} --lines {lines} --nostream")
+    cmd = (
+        f"echo '=== OUT ===' && tail -n {lines} ~/.pm2/logs/{name}-out.log 2>/dev/null; "
+        f"echo '=== ERROR ===' && tail -n {lines} ~/.pm2/logs/{name}-error.log 2>/dev/null"
+    )
+    out, err, code = _run(cmd)
     log("pm2_logs", f"{name} last={lines}")
     return _result(out, err, code)
 
 
-# ── screen (Telegram bot) ────────────────────────────────────────────────────
+# ── screen — Telegram bot (name: bot) ────────────────────────────────────────
 
 @mcp.tool()
 def ssh_screen_list() -> str:
@@ -245,19 +250,22 @@ def ssh_screen_list() -> str:
 
 
 @mcp.tool()
-def ssh_screen_logs(name: str, lines: int = 50) -> str:
+def ssh_screen_logs(name: str) -> str:
     """
-    Read the last N lines from a screen session's log file.
-    Requires the session to have been started with 'screen -L -Logfile ~/logs/<name>.log'.
-    Allowed sessions are defined in MCP_SSH_ALLOWED_SCREENS.
+    Capture the current visible output of a screen session via hardcopy.
+    Allowed sessions defined in MCP_SSH_ALLOWED_SCREENS (default: bot).
+
+    Note: hardcopy captures only the current screen buffer (last ~24 lines).
+    For full persistent history, restart the session with:
+      screen -L -Logfile ~/logs/<name>.log -S <name> python bot.py
     """
     if name not in ALLOWED_SCREENS:
         log("screen_logs", f"BLOCKED: {name}", success=False)
         return f"Screen '{name}' is not in the allowed list: {sorted(ALLOWED_SCREENS)}"
-    lines = min(int(lines), 200)
-    log_path = f"~/logs/{name}.log"
-    out, err, code = _run(f"tail -n {lines} {log_path} 2>&1")
-    log("screen_logs", f"{name} last={lines}")
+    tmp = f"/tmp/mcp_screen_{name}.txt"
+    cmd = f"screen -S {name} -X hardcopy {tmp} && sleep 0.2 && cat {tmp} && rm -f {tmp}"
+    out, err, code = _run(cmd)
+    log("screen_logs", f"{name} via hardcopy")
     return _result(out, err, code)
 
 
@@ -267,7 +275,7 @@ def ssh_screen_logs(name: str, lines: int = 50) -> str:
 def ssh_git_pull(repo_path: str) -> str:
     """
     Run 'git pull' in an allowed repository path on the VPS.
-    Allowed paths are defined in MCP_SSH_ALLOWED_REPOS.
+    Allowed paths defined in MCP_SSH_ALLOWED_REPOS.
     """
     if repo_path not in ALLOWED_REPO_PATHS:
         log("git_pull", f"BLOCKED: {repo_path}", success=False)
