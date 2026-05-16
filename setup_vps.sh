@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
-# setup_vps.sh — Run this ONCE on your VPS (as root or with sudo)
+# setup_vps.sh — Run this ONCE on your VPS as root or with sudo
 #
-# Creates the `claude-agent` user with minimal permissions and configures
-# sudo rules so it can only manage specific services.
+# Configures sudo rules so the 'panda' user can manage nginx via systemctl.
+# pm2 and screen already work natively since they run under 'panda'.
 #
 # Usage:
 #   chmod +x setup_vps.sh
@@ -12,61 +12,39 @@
 
 set -e
 
-USER="claude-agent"
-SERVICES=("telegram-bot" "pandapoints-dapp" "nginx")
+SSH_USER="panda"
 
-echo ">>> Creating user: $USER"
-if id "$USER" &>/dev/null; then
-    echo "    User already exists, skipping creation."
-else
-    useradd -m -s /bin/bash "$USER"
-    echo "    User created."
-fi
+echo ">>> Configuring sudoers for $SSH_USER (nginx only)"
+SUDOERS_FILE="/etc/sudoers.d/panda-mcp"
 
-echo ">>> Setting up .ssh directory"
-SSH_DIR="/home/$USER/.ssh"
-mkdir -p "$SSH_DIR"
-touch "$SSH_DIR/authorized_keys"
-chmod 700 "$SSH_DIR"
-chmod 600 "$SSH_DIR/authorized_keys"
-chown -R "$USER:$USER" "$SSH_DIR"
-
-echo ""
-echo ">>> NEXT STEP: paste your MCP SSH public key into:"
-echo "    $SSH_DIR/authorized_keys"
-echo ""
-echo "    On your Windows machine, run:"
-echo "    cat C:\\Users\\panta\\.ssh\\mcp_ssh_ed25519.pub"
-echo "    Then paste the output into authorized_keys."
-echo ""
-
-echo ">>> Writing sudoers rules for $USER"
-SUDOERS_FILE="/etc/sudoers.d/claude-agent"
-
-{
-    echo "# Sudoers rules for mcp-ssh claude-agent user"
-    echo "# Only allows specific systemctl commands — no general sudo"
-    echo ""
-    for svc in "${SERVICES[@]}"; do
-        echo "$USER ALL=(ALL) NOPASSWD: /bin/systemctl status $svc"
-        echo "$USER ALL=(ALL) NOPASSWD: /bin/systemctl restart $svc"
-        echo "$USER ALL=(ALL) NOPASSWD: /bin/journalctl -u $svc *"
-    done
-} > "$SUDOERS_FILE"
+cat > "$SUDOERS_FILE" << EOF
+# mcp-ssh sudoers — allows panda to manage nginx and read its logs
+$SSH_USER ALL=(ALL) NOPASSWD: /bin/systemctl status nginx
+$SSH_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart nginx
+$SSH_USER ALL=(ALL) NOPASSWD: /usr/bin/tail -n * /var/log/nginx/error.log
+$SSH_USER ALL=(ALL) NOPASSWD: /usr/bin/tail -n * /var/log/nginx/access.log
+EOF
 
 chmod 440 "$SUDOERS_FILE"
 visudo -c -f "$SUDOERS_FILE"
-echo "    Sudoers file written and validated: $SUDOERS_FILE"
+echo "    Sudoers file written: $SUDOERS_FILE"
+
+echo ""
+echo ">>> Setting up screen log directory"
+LOG_DIR="/home/$SSH_USER/logs"
+mkdir -p "$LOG_DIR"
+chown "$SSH_USER:$SSH_USER" "$LOG_DIR"
+echo "    Log directory: $LOG_DIR"
 
 echo ""
 echo ">>> Setup complete!"
 echo ""
-echo "    Summary of what was done:"
-echo "      - User '$USER' created (or already existed)"
-echo "      - .ssh/authorized_keys created and ready for your public key"
-echo "      - sudo rules: only systemctl status/restart for: ${SERVICES[*]}"
+echo "    IMPORTANT: restart your Telegram bot screen session with logging enabled:"
 echo ""
-echo "    Remember to:"
-echo "      1. Paste your public key into $SSH_DIR/authorized_keys"
-echo "      2. Test SSH from your Windows machine before configuring Claude Desktop"
-echo "      3. Add more services to SERVICES array and re-run if needed"
+echo "    screen -S telegram-bot -X quit   # stop current session"
+echo "    screen -L -Logfile ~/logs/telegram-bot.log -S telegram-bot python bot.py"
+echo ""
+echo "    This allows mcp-ssh to read the bot output via ssh_screen_logs."
+echo ""
+echo "    Add your mcp-ssh public key to ~/.ssh/authorized_keys:"
+echo "    echo 'YOUR_PUBLIC_KEY' >> /home/$SSH_USER/.ssh/authorized_keys"
