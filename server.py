@@ -110,8 +110,8 @@ def _run(command: str, pty: bool = False) -> tuple[str, str, int]:
         if pty:
             channel.get_pty()
         channel.exec_command(command)
-        out = channel.makefile("r").read().strip()
-        err = channel.makefile_stderr("r").read().strip()
+        out = channel.makefile("rb").read().decode("utf-8", errors="replace").strip()
+        err = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace").strip()
         code = channel.recv_exit_status()
         return out, err, code
     finally:
