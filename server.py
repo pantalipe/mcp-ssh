@@ -50,6 +50,32 @@ ALLOWED_REPO_PATHS = set(
     os.environ.get("MCP_SSH_ALLOWED_REPOS", "").split(",")
 ) - {""}
 
+# Pre-approved command aliases for ssh_run_command.
+# Callers pass an alias key — the actual shell command is defined here only.
+# Extend via MCP_SSH_ALLOWED_COMMANDS env var (JSON object: {"alias": "command"}).
+_CMD_DEFAULTS: dict[str, str] = {
+    # --- systemd service management ---
+    "systemctl-enable-nginx":    "sudo -n systemctl enable nginx",
+    "systemctl-disable-nginx":   "sudo -n systemctl disable nginx",
+    "systemctl-enable-pm2":      "sudo -n systemctl enable pm2-panda",
+    # --- PM2 lifecycle ---
+    "pm2-startup":               "pm2 startup systemd",
+    "pm2-save":                  "pm2 save",
+    "pm2-resurrect":             "pm2 resurrect",
+    # --- nginx ---
+    "nginx-configtest":          "sudo -n nginx -t",
+    # --- diagnostics ---
+    "whoami":                    "whoami && id",
+    "env-path":                  "echo $PATH",
+}
+_extra_cmds = os.environ.get("MCP_SSH_ALLOWED_COMMANDS", "")
+try:
+    ALLOWED_COMMANDS: dict[str, str] = (
+        {**_CMD_DEFAULTS, **json.loads(_extra_cmds)} if _extra_cmds else _CMD_DEFAULTS
+    )
+except json.JSONDecodeError:
+    ALLOWED_COMMANDS = _CMD_DEFAULTS
+
 # ---------------------------------------------------------------------------
 # Audit logger
 # ---------------------------------------------------------------------------
@@ -314,6 +340,48 @@ def ssh_list_dir(remote_path: str) -> str:
     out, err, code = _run(f"ls -lah {remote_path} 2>&1")
     log("list_dir", remote_path)
     return _result(out, err, code)
+
+
+# ── Controlled command runner ─────────────────────────────────────────────
+
+@mcp.tool()
+def ssh_run_command(alias: str) -> str:
+    """
+    Run a pre-approved command on the VPS by alias.
+    The caller never supplies raw shell — only an alias key defined server-side.
+    Every call (including blocked attempts) is written to the audit log.
+
+    Built-in aliases:
+      systemctl-enable-nginx   — enable nginx to auto-start on boot
+      systemctl-disable-nginx  — disable nginx autostart
+      systemctl-enable-pm2     — enable pm2-panda systemd service
+      pm2-startup              — generate pm2 systemd startup hook
+      pm2-save                 — save the current pm2 process list
+      pm2-resurrect            — restore the saved pm2 process list
+      nginx-configtest         — test nginx configuration (nginx -t)
+      whoami                   — show current user and groups
+      env-path                 — show PATH as seen by the SSH session
+
+    Extra aliases can be added via the MCP_SSH_ALLOWED_COMMANDS env var
+    (JSON object mapping alias → command, merged with the built-in list).
+    """
+    if alias not in ALLOWED_COMMANDS:
+        log("run_command", f"BLOCKED unknown alias: {alias!r}", success=False)
+        available = sorted(ALLOWED_COMMANDS.keys())
+        return (
+            f"Unknown alias '{alias}'.\n"
+            f"Available aliases: {available}\n"
+            f"To add more, set MCP_SSH_ALLOWED_COMMANDS in your env (JSON)."
+        )
+
+    command = ALLOWED_COMMANDS[alias]
+    try:
+        out, err, code = _run(command)
+        log("run_command", f"{alias!r} -> {command!r} -> exit {code}", success=(code == 0))
+        return _result(out, err, code)
+    except Exception as e:
+        log("run_command", f"{alias!r} -> EXCEPTION: {e}", success=False)
+        return f"Command failed with exception: {e}"
 
 
 # ── Audit log viewer ──────────────────────────────────────────────────────────
