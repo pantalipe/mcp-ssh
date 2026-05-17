@@ -60,6 +60,7 @@ _CMD_DEFAULTS: dict[str, str] = {
     "systemctl-enable-pm2":      "sudo -n systemctl enable pm2-panda",
     # --- PM2 lifecycle ---
     "pm2-startup":               "pm2 startup systemd",
+    "pm2-install-startup":       "sudo env PATH=$PATH:/usr/bin /usr/local/lib/node_modules/pm2/bin/pm2 startup systemd -u panda --hp /home/panda",
     "pm2-save":                  "pm2 save",
     "pm2-resurrect":             "pm2 resurrect",
     # --- nginx ---
