@@ -68,6 +68,11 @@ _CMD_DEFAULTS: dict[str, str] = {
     # --- diagnostics ---
     "whoami":                    "whoami && id",
     "env-path":                  "echo $PATH",
+    # --- security hardening (added 2026-07, one-off VPS security audit follow-up) ---
+    "fail2ban-install":          "sudo -n dnf install -y fail2ban && sudo -n systemctl enable --now fail2ban && (sudo -n fail2ban-client status sshd 2>&1 || sudo -n systemctl status fail2ban --no-pager)",
+    "security-updates-start":    "sudo -n bash -c 'nohup dnf update --security -y > /tmp/security-update.log 2>&1 & echo $! > /tmp/security-update.pid' ; sleep 1 ; echo STARTED",
+    "security-updates-check":    "if sudo -n test -e /proc/$(sudo -n cat /tmp/security-update.pid 2>/dev/null); then echo RUNNING; else echo DONE; fi ; echo '---' ; sudo -n tail -n 60 /tmp/security-update.log 2>&1",
+    "sshd-config-d":             "sudo -n cat /etc/ssh/sshd_config.d/*.conf 2>&1",
 }
 _extra_cmds = os.environ.get("MCP_SSH_ALLOWED_COMMANDS", "")
 try:
